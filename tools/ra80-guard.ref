@@ -1,0 +1,30 @@
+#!/bin/sh
+# RA80 内存守护：给关键守护进程加 OOM 保护，并在无线被杀后自动拉起
+# 背景：256MB + 双频 ath11k，可用内存常年只有 2~4MB，OOM killer 会挑进程杀
+
+PROTECT="hostapd netifd rpcd uhttpd dnsmasq odhcpd"
+RETRY_GAP=60
+last_try=0
+
+while :; do
+	for name in $PROTECT; do
+		for pid in $(pidof "$name" 2>/dev/null); do
+			adj=$(cat "/proc/$pid/oom_score_adj" 2>/dev/null)
+			[ "$adj" = "-1000" ] || echo -1000 > "/proc/$pid/oom_score_adj" 2>/dev/null
+		done
+	done
+
+	# 射频节点还在但没有 hostapd → 说明无线被杀了，重新拉起
+	if [ -e /sys/class/ieee80211/phy0 ] || [ -e /sys/class/ieee80211/phy1 ]; then
+		if ! pidof hostapd >/dev/null 2>&1; then
+			now=$(date +%s)
+			if [ $((now - last_try)) -ge $RETRY_GAP ]; then
+				last_try=$now
+				logger -t ra80-guard "hostapd 不在，重新拉起无线"
+				wifi up >/dev/null 2>&1
+			fi
+		fi
+	fi
+
+	sleep 15
+done

@@ -1,0 +1,57 @@
+#!/bin/sh
+# RA80 首次启动的无线默认配置：2.4G + 5G 双频热点
+#
+# 不用 `wifi config` 生成再改：它按当时的 phy 枚举顺序写 path，
+# 两个射频谁先注册不稳定，会出现「radio1 的 path 指向 2.4G 却配 5G 信道」，
+# hostapd 于是报 Could not determine operating frequency。
+# 这里直接按 DTS 里的固定路径写死，与枚举顺序无关。
+#
+# MAC：2.4G = LAN+2，5G = LAN+1（与原厂 ART 分配一致）
+
+base=$(cat /sys/class/net/eth0/address 2>/dev/null)
+mac2g=""
+mac5g=""
+if [ -n "$base" ]; then
+	oui=${base%:*}
+	last=${base##*:}
+	mac5g=$(printf '%s:%02x' "$oui" $((0x$last + 1)))
+	mac2g=$(printf '%s:%02x' "$oui" $((0x$last + 2)))
+fi
+
+cat > /etc/config/wireless <<WIFI
+config wifi-device 'radio0'
+	option type 'mac80211'
+	option path 'platform/soc@0/c000000.wifi'
+	option band '2g'
+	option channel '1'
+	option htmode 'HE40'
+	option disabled '0'
+
+config wifi-iface 'default_radio0'
+	option device 'radio0'
+	option network 'lan'
+	option mode 'ap'
+	option ssid 'RA80'
+	option encryption 'psk2'
+	option key '12345678'
+	option macaddr '$mac2g'
+
+config wifi-device 'radio1'
+	option type 'mac80211'
+	option path 'platform/soc@0/b00a040.wifi'
+	option band '5g'
+	option channel '36'
+	option htmode 'HE80'
+	option disabled '0'
+
+config wifi-iface 'default_radio1'
+	option device 'radio1'
+	option network 'lan'
+	option mode 'ap'
+	option ssid 'RA80-5G'
+	option encryption 'psk2'
+	option key '12345678'
+	option macaddr '$mac5g'
+WIFI
+
+exit 0

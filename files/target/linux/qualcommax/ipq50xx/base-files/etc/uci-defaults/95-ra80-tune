@@ -1,0 +1,12 @@
+#!/bin/sh
+# RA80 调优：软件流加速（flowtable）
+# mainline OpenWrt 没有 qca-nss 的 NSS offload，flowtable 是唯一可用的转发加速手段
+
+uci -q set firewall.@defaults[0].flow_offloading='1'
+uci -q set firewall.@defaults[0].flow_offloading_hw='0'
+uci -q commit firewall
+
+# 首次启动把守护服务挂上
+/etc/init.d/ra80-guard enable 2>/dev/null
+
+exit 0
